@@ -39,5 +39,10 @@
     "@dashkite/genie-presets": "^0.5.2"
   },
   "dependencies": {
+    "@dashkite/joy": "^0.3.11",
+    "@pandastrike/garden": "^8.0.1",
+    "panda-confidential": "^2",
+    "panda-parchment": "^5.0.2",
+    "sundog": "^6.0.7"
   }
 }

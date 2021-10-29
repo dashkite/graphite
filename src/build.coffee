@@ -1,40 +1,70 @@
-build = (spec) ->
+import { VertexModel } from "./graph-interface"
+import { generateID } from "./helpers"
 
-  console.log(spec)
+findByName = (ax, value) -> ax.find ({name}) -> name == value 
+
+mapTypes = (object) ->
+  output = {}
+  for key, type of object
+    output[key] = switch type
+      when "string", "date-time" then "S"
+      when "json" then "JSON"
+      when "number" then "N"
+  output
+      
+
+buildVertices = (spec) ->
+  _build = (name) ->
+    vertex = findByName spec.vertices, name
+
+    { get, put, del } = VertexModel
+      table: spec.table
+      primaryField: vertex.primary
+      label: vertex.name
+      shards: 1000
+      types: mapTypes vertex.properties
+
+    { get, put, delete: del }
+
+  _abstract = (name, model) ->
+    vertex = findByName spec.vertices, name
+
+    create: (data) ->
+      now = (new Date).toISOString()
+      
+      object = 
+        created: now
+        updated: now
+      
+      for field of vertex.properties
+        if field == vertex.primary
+          object[field] = await generateID 16, "base36"
+        else
+          object[field] = data[field]
+
+      await model.put object
+      object
+
+    get: model.get
+
+    put: (data) ->
+      data.updated = (new Date).toISOString()
+      await model.put data
+      data
+
+    delete: model.delete
+
+
+  model = {}
+  model[name] = _abstract name, _build(name) for { name } in spec.vertices 
+  model
+     
+
+
+build = (spec) ->
+  model = buildVertices spec
+  # TODO: Edges
+
+  model
 
 export { build }
-
-#   Model = do ->
-
-#     initalize = (context) ->
-#         now = (new Date).toISOString()
-
-#         account: await generateID 16, "base36"
-#         displayName: context.displayName
-#         created: now
-#         updated: now
-
-#     create = flow [
-#         initalize
-#         tee dynamodb.account.put
-#     ]
-
-#     get = dynamodb.account.get
-
-#     put = flow [
-#         tee (account) -> account.updated = (new Date).toISOString()
-#         tee dynamodb.account.put
-#     ]
-
-#     _delete = flow [
-#         dynamodb.account.delete
-#     ]
-
-
-
-#     {
-#         create
-#         get
-#         put
-#         delete: _delete
-#     }
