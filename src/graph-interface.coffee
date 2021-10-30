@@ -35,7 +35,7 @@ validateModel = (options) ->
     throw new Error "Cannot establish Graphite instance for undefined DynamoDB table name."
 
   for key, value of types
-    if key in ["origin", "target", "typeTarget", "typeOrigin", "created", "stash", "dynamoExpires"]
+    if key in ["origin", "target", "typeTarget", "typeOrigin", "stash", "dynamoExpires"]
       throw new Error "The key #{key} specified in model #{label} is reserved by graphite to specify a vertex/edge property."
 
 # Wraps the Sundog DynamoDB key-value store model to handle edges.
