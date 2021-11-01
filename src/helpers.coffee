@@ -1,18 +1,18 @@
 import { confidential } from "panda-confidential"
 
 # TODO: We need KMS randomness access in Lambda contexts.
-{ randomBytes, convert } = confidential()
-generateID = (length, format) ->
-  if !length then throw new Error "Must provide length parameter."
-  if !format then throw new Error "Must provide output format parameter."
+{ randomBytes } = confidential()
 
-  if format == "base36"
-    r = 0n
-    for b, k in (await randomBytes length)
-      r += (BigInt b) * (256n ** (BigInt k))
-    r.toString 36
-  else
-    convert from: "bytes", to: format, (await randomBytes length)
+generateID = () ->
+  bytes = await randomBytes 16
+  result = 0n
+  power = bytes.length - 1
+  
+  for byte in bytes
+    result += (BigInt byte) * (256n ** (BigInt power))
+    power--
+
+  result.toString 36
 
 export {
   generateID

@@ -1,5 +1,5 @@
-import { VertexModel } from "./graph-interface"
-import { generateID } from "./helpers"
+import { VertexModel } from "../graph-interface"
+import { generateID } from "../helpers"
 
 findByName = (ax, value) -> ax.find ({name}) -> name == value 
 
@@ -44,7 +44,7 @@ buildVertices = (spec) ->
       
       for field of vertex.properties
         if field == vertex.primary
-          object[field] = await generateID 16, "base36"
+          object[field] = await generateID()
         else
           object[field] = data[field]
 
