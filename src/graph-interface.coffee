@@ -170,7 +170,7 @@ EdgeModel = (options) ->
     stash ?= {}
     stash.__key = origin: _origin, target: _target
 
-    merge body,
+    result = merge body,
       origin: origin
       target: target
       typeTarget: "#{edge}:#{target}"
@@ -178,6 +178,9 @@ EdgeModel = (options) ->
       created: created ? new Date().toISOString()
       stash: stash
       dynamoExpires: dynamoExpires
+
+    console.log "buildItem", result
+    result
 
   buildKey = ({origin, edge, target}) ->
     origin: origin

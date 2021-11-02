@@ -9,9 +9,11 @@ buildModel = (spec, vertices, edges) ->
   # delete: [ vertices[ name ].delete ]
 
   if spec.edges?
-    verticesWithSortEdges = project "to", spec.edges
+    verticesWithInEdges = project "to", spec.edges
+    verticesWithOutEdges = project "from", spec.edges
   else 
-    verticesWithSortEdges = []
+    verticesWithInEdges = []
+    verticesWithOutEdges = []
 
   for { name, search: searchEdges } in spec.vertices
     do (name, searchEdges, {vertex, search, sort, hasSearch, hasSort} = {}) ->
@@ -19,7 +21,7 @@ buildModel = (spec, vertices, edges) ->
       search = edges.search[ name ]
       sort = edges.sort[ name ]
       hasSearch = searchEdges?
-      hasSort = (name in verticesWithSortEdges)
+      hasSort = (name in verticesWithInEdges)
 
       model[ name ] = 
         create: (args...) ->
@@ -35,7 +37,30 @@ buildModel = (spec, vertices, edges) ->
 
         get: vertices[ name ].get
 
-        list: (q, parameters = {}) ->
+        search: do ->
+          output = {}   
+          if hasSearch
+            for type in searchEdges
+              do (type) ->
+                output[ type ] = (q, parameters = {}) -> 
+                  search.get q, { parameters..., type }
+          output
+
+        list: do ->
+          output = {}
+          if (name in verticesWithOutEdges)
+            for edgeSpec in spec.edges when edgeSpec.from == name  
+              do (edgeSpec) ->
+                output[ edgeSpec.name ] = {}
+                for sortName in edgeSpec.sort
+                  do (sortName) ->
+                    output[ edgeSpec.name ][ sortName ] = 
+                      (origin, parameters = {}) ->
+                        edges.sort[ edgeSpec.to ].get origin, {parameters..., sort:sortName }
+          output
+
+        
+          
 
         put: (args...) ->
           if hasSort

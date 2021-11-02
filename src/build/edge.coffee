@@ -1,4 +1,6 @@
-import { EdgeModel } from "../graph-interface"
+import * as _ from "@dashkite/joy"
+import { EdgeModel, randomShard } from "../graph-interface"
+import * as h from "../graph-helpers"
 
 findByName = (ax, value) -> ax.find ({name}) -> name == value 
 
@@ -18,7 +20,9 @@ buildEdges = (spec) ->
               e.origin "#{vertex.name}Search#{i}", [ "#{vertex.name}SearchIndex" ]
               e.edge "#{property}SearchIndex"
               e.target _origin[property], [ "#{property}SearchIndex" ]
-              e.stash [property]: _origin[property]
+              e.stash do ->
+                [vertex.primary]: _origin[vertex.primary]
+                [property]: _origin[property]
             ]
     
       delete: (_origin) ->
@@ -31,14 +35,25 @@ buildEdges = (spec) ->
             ]
 
       get: (q, {limit, type}) ->
-        e.query [
-          e.vertex "#{vertex.name}Search#{randomShard vertex.shards}", [ "#{vertex.name}SearchIndex" ]
-          e.edge "#{type}SearchIndex"
-          e.direction "out"
-          e.beginsWith q
-          e.limit limit ? 25
-          e.sort "alphabetical"
+        h.reshape [
+           e.query [
+            e.vertex "#{vertex.name}Search#{randomShard vertex.shards}", [ "#{vertex.name}SearchIndex" ]
+            e.edge "#{type}SearchIndex"
+            e.direction "out"
+            e.beginsWith q
+            e.limit limit ? 25
+            e.sort "alphabetical"
+          ]
+          _.get "results"
+          _.tee (x) -> console.log x
+          h.pluck vertex.primary
+          h.pluck type
+          _.map _.mask [ 
+            vertex.primary
+            type
+          ]
         ]
+       
 
   buildSortEdge = (name) ->
     edge = findByName spec.edges, name
@@ -50,12 +65,12 @@ buildEdges = (spec) ->
     else 
       put: (_origin, _target) ->
         Promise.all do ->
-          for sortName in edge.sort
+          for sort in edge.sort
             e.put [
               e.origin _origin[originVertex.primary], [ edge.from ]
-              e.edge "#{edge.name}-#{sortName}"
+              e.edge "#{edge.name}-#{sort}"
               e.target _target[targetVertex.primary], [ edge.to ]
-              e.created sortName
+              e.created _target[ sort ]
               e.stash do ({output} = {})->
                 output = {} 
                 { properties } = targetVertex
@@ -64,14 +79,26 @@ buildEdges = (spec) ->
                 output 
             ]
 
-      get: (_origin, {before, after, limit, type}) ->
-        e.query [
-          e.vertex _origin[originVertex.primary], [ edge.from ]
-          e.edge "#{edge.name}-#{type}"
-          e.direction "out"
-          e.range { before, after }
-          e.limit limit ? 25
-          e.sort "reverse-chronological"
+      get: (_origin, {before, after, limit, sort}) ->
+        h.reshape [
+          e.query [
+            e.vertex _origin[originVertex.primary], [ edge.from ]
+            e.edge "#{edge.name}-#{sort}"
+            e.direction "out"
+            e.range { before, after }
+            e.limit limit ? 25
+            e.sort "reverse-chronological"
+          ]
+          _.get "results"
+          _.tee (x) -> console.log x
+          h.fromKey "origin", originVertex.primary
+          h.fromKey "target", targetVertex.primary
+          (h.pluck property for property in edge.properties)...
+          _.map _.mask [ 
+            originVertex.primary 
+            targetVertex.primary
+            edge.properties...
+          ]
         ]
 
       delete: (_origin, _target) ->
@@ -87,7 +114,7 @@ buildEdges = (spec) ->
   sort: do ->
     model = {}
     if spec.edges?
-      for edge in spec.edges when edge.sort? 
+      for edge in spec.edges when edge.sort?
         model[ edge.to ] = buildSortEdge edge.name
     model
 

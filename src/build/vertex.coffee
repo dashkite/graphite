@@ -36,17 +36,16 @@ buildVertices = (spec) ->
     vertex = findByName spec.vertices, name
 
     create: (data) ->
-      now = (new Date).toISOString()
-      
-      object = 
-        created: now
-        updated: now
-      
+      object = {}
       for field of vertex.properties
         if field == vertex.primary
           object[field] = await generateID()
         else
           object[field] = data[field]
+
+      now = (new Date).toISOString()
+      object.created = now
+      object.updated = now
 
       await model.put object
       object
