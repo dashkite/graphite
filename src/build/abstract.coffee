@@ -76,7 +76,9 @@ buildModel = (spec, vertices, edges) ->
 
         delete: (_vertex) ->
    
-          # When vertex is target (incoming edges)
+          # For loop on different types of sort edges
+
+          # When _vertex is target (incoming edges)
           # Find all incoming edges (find origins)
           # Delete them
           for edgeSpec in spec.edges when edgeSpec.to == name
@@ -87,7 +89,7 @@ buildModel = (spec, vertices, edges) ->
               await edges.sort[ name ].delete _origin, _vertex
 
 
-          # When vertex is origin (outgoing edges)
+          # When _vertex is origin (outgoing edges)
           # Find all outgoing edges (find targets)
           # Delete them
           # Apply deleteSubgraph to the targets if target.center != true
@@ -100,9 +102,19 @@ buildModel = (spec, vertices, edges) ->
             #       If not, we should add that to the lower layers of Graphite.
             targetVertex = findByName spec.vertices, edgeSpec.to
             if targetVertex.center != true
-              # When target is a non-central vertex, recurse on delete.
+              # When target is a non-central vertex, perform an orphan check.
               for _target in _targets
-                await model[ edgeSpec.to ].delete _target 
+                # Search for empty incoming edges
+                isOrphan = true
+                for edgeSpec in spec.edges when edgeSpec.to == targetVertex.name
+                  edgeResults = edges.sort[ targetVertex.name ].getIn _target
+                  if !(isEmpty edgeResults)
+                    isOrphan = false
+                    break 
+
+                # If empty, recurse on delete.
+                if isOrphan
+                  await model[ targetVertex.name ].delete _target 
           
 
           # Delete search edges and the vertex itself.
