@@ -1,4 +1,6 @@
-import { project } from "@dashkite/joy"
+import { project, find } from "@dashkite/joy"
+
+findByName = (ax, value) -> ax.find ({name}) -> name == value 
 
 buildModel = (spec, vertices, edges) ->
   model = {}
@@ -56,7 +58,7 @@ buildModel = (spec, vertices, edges) ->
                   do (sortName) ->
                     output[ edgeSpec.name ][ sortName ] = 
                       (origin, parameters = {}) ->
-                        edges.sort[ edgeSpec.to ].get origin, {parameters..., sort:sortName }
+                        edges.sort[ edgeSpec.to ].getOut origin, {parameters..., sort:sortName }
           output
 
         
@@ -72,16 +74,44 @@ buildModel = (spec, vertices, edges) ->
           await search.put target if hasSearch
           await sort.put origin, target if hasSort
 
-        delete: (target) ->
+        delete: (_vertex) ->
+   
+          # When vertex is target (incoming edges)
+          # Find all incoming edges (find origins)
+          # Delete them
+          for edgeSpec in spec.edges when edgeSpec.to == name
+            _origins = edges.sort[ name ].getIn _vertex
+            for _origin in _origins
+              # TODO: Investigate the parallelism limits around requests to 
+              #       DynamoDB. We can't Promise.all here, but can we partition?
+              await edges.sort[ name ].delete _origin, _vertex
+
+
+          # When vertex is origin (outgoing edges)
+          # Find all outgoing edges (find targets)
+          # Delete them
+          # Apply deleteSubgraph to the targets if target.center != true
+          for edgeSpec in spec.edges when edgeSpec.from == name
+            _targets = edges.sort[ edgeSpec.to ].getOut _vertex
+            for _target in _targets
+              await edges.sort[ edgeSpec.to ].delete _vertex, _target
+            
+            # TODO: Can we currently get the type metadata on the vertex now?
+            #       If not, we should add that to the lower layers of Graphite.
+            targetVertex = findByName spec.vertices, edgeSpec.to
+            if targetVertex.center != true
+              # When target is a non-central vertex, recurse on delete.
+              for _target in _targets
+                await model[ edgeSpec.to ].delete _target 
           
-          # if hasSort
-          #   origins = spec.edges.filter (edge) -> edge.to == name
-          #   for reference in origins
-          #     origin = await verticies[reference].get reference
-          #     await sort.delete origin, target 
+
+          # Delete search edges and the vertex itself.
+          await search.delete _vertex if hasSearch
+          await vertex.delete _vertex
+            
+
           
-          await search.delete target if hasSearch
-          await vertex.delete target
+          
 
   console.log("model", model)
   model

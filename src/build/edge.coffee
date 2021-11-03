@@ -34,7 +34,7 @@ buildEdges = (spec) ->
               e.target _origin[property], [ "#{property}SearchIndex" ]
             ]
 
-      get: (q, {limit, type}) ->
+      get: (q, {limit, next, type}) ->
         h.reshape [
            e.query [
             e.vertex "#{vertex.name}Search#{randomShard vertex.shards}", [ "#{vertex.name}SearchIndex" ]
@@ -42,6 +42,8 @@ buildEdges = (spec) ->
             e.direction "out"
             e.beginsWith q
             e.limit limit ? 25
+            e.startKey next
+            e.returnNext true
             e.sort "alphabetical"
           ]
           _.get "results"
@@ -79,7 +81,7 @@ buildEdges = (spec) ->
                 output 
             ]
 
-      get: (_origin, {before, after, limit, sort}) ->
+      getOut: (_origin, {before, after, limit, next, sort}) ->
         h.reshape [
           e.query [
             e.vertex _origin[originVertex.primary], [ edge.from ]
@@ -87,6 +89,8 @@ buildEdges = (spec) ->
             e.direction "out"
             e.range { before, after }
             e.limit limit ? 25
+            e.startKey next
+            e.returnNext true
             e.sort "reverse-chronological"
           ]
           _.get "results"
@@ -101,14 +105,38 @@ buildEdges = (spec) ->
           ]
         ]
 
-      delete: (_origin, _target) ->
-        Promise.all do -> 
-          for sortName in edge.sort
-            e.del [
-              e.origin _origin[originVertex.primary], [ edge.from ]
-              e.edge "#{edge.name}-#{sortName}"
-              e.target _target[targetVertex.primary], [ edge.to ]
-            ]
+    getIn: (_target, {before, after, limit, next, sort}) ->
+        h.reshape [
+          e.query [
+            e.vertex _target[targetVertex.primary], [ edge.to ]
+            e.edge "#{edge.name}-#{sort}"
+            e.direction "in"
+            e.range { before, after }
+            e.limit limit ? 25
+            e.startKey next
+            e.returnNext true
+            e.sort "reverse-chronological"
+          ]
+          _.get "results"
+          _.tee (x) -> console.log x
+          h.fromKey "origin", originVertex.primary
+          h.fromKey "target", targetVertex.primary
+          (h.pluck property for property in edge.properties)...
+          _.map _.mask [ 
+            originVertex.primary 
+            targetVertex.primary
+            edge.properties...
+          ]
+        ]
+
+    delete: (_origin, _target) ->
+      Promise.all do ->
+        for sortName in edge.sort
+          e.del [
+            e.origin _origin[originVertex.primary], [ edge.from ]
+            e.edge "#{edge.name}-#{sortName}"
+            e.target _target[targetVertex.primary], [ edge.to ]
+          ]
 
 
   sort: do ->
