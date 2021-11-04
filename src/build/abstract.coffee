@@ -1,4 +1,4 @@
-import { project, find } from "@dashkite/joy"
+import { project, find, isEmpty } from "@dashkite/joy"
 
 findByName = (ax, value) -> ax.find ({name}) -> name == value 
 
@@ -33,7 +33,7 @@ buildModel = (spec, vertices, edges) ->
             [ data ] = args
 
           target = await vertex.create data
-          await search.put target if hasSearch 
+          await search.put target if hasSearch
           await sort.put origin, target if hasSort 
           target
 
@@ -75,46 +75,53 @@ buildModel = (spec, vertices, edges) ->
           await sort.put origin, target if hasSort
 
         delete: (_vertex) ->
-   
-          # For loop on different types of sort edges
 
+          # There is an asymmetry between getIn getOut and delete. getIn and Out
+          # are targeted to a specific edge. There is no interface yet to grab
+          # all edges. Delete, however, targets all edges between two vertices
+          # for deletion.
+   
           # When _vertex is target (incoming edges)
           # Find all incoming edges (find origins)
           # Delete them
           for edgeSpec in spec.edges when edgeSpec.to == name
-            _origins = edges.sort[ name ].getIn _vertex
-            for _origin in _origins
-              # TODO: Investigate the parallelism limits around requests to 
-              #       DynamoDB. We can't Promise.all here, but can we partition?
-              await edges.sort[ name ].delete _origin, _vertex
+            for sortName in edgeSpec.sort
+              _origins = await edges.sort[ name ].getIn _vertex, sort: sortName
+              for _origin in _origins
+                # TODO: Investigate the parallelism limits around requests to 
+                #       DynamoDB. We can't Promise.all here, but can we partition?
+                await edges.sort[ name ].delete _origin, _vertex
 
 
           # When _vertex is origin (outgoing edges)
           # Find all outgoing edges (find targets)
           # Delete them
-          # Apply deleteSubgraph to the targets if target.center != true
+          # Recurse delete over the targets if target.center != true
           for edgeSpec in spec.edges when edgeSpec.from == name
-            _targets = edges.sort[ edgeSpec.to ].getOut _vertex
-            for _target in _targets
-              await edges.sort[ edgeSpec.to ].delete _vertex, _target
-            
-            # TODO: Can we currently get the type metadata on the vertex now?
-            #       If not, we should add that to the lower layers of Graphite.
-            targetVertex = findByName spec.vertices, edgeSpec.to
-            if targetVertex.center != true
-              # When target is a non-central vertex, perform an orphan check.
+            for sortName in edgeSpec.sort
+              _targets = await edges.sort[ edgeSpec.to ].getOut _vertex, sort: sortName
               for _target in _targets
-                # Search for empty incoming edges
-                isOrphan = true
-                for edgeSpec in spec.edges when edgeSpec.to == targetVertex.name
-                  edgeResults = edges.sort[ targetVertex.name ].getIn _target
-                  if !(isEmpty edgeResults)
-                    isOrphan = false
-                    break 
+                await edges.sort[ edgeSpec.to ].delete _vertex, _target
+              
+              # TODO: Can we currently get the type metadata on the vertex now?
+              #       If not, we should add that to the lower layers of Graphite.
+              targetVertex = findByName spec.vertices, edgeSpec.to
+              if targetVertex.center != true
+                # When target is a non-central vertex, perform an orphan check.
+                for _target in _targets
+                  # Search for empty incoming edges
+                  isOrphan = true
+                  for edgeSpec in spec.edges when edgeSpec.to == targetVertex.name
+                    for _sortName in edgeSpec.sort
+                      edgeResults = await edges.sort[ targetVertex.name ].getIn _target, sort: _sortName
+                      if !(isEmpty edgeResults)
+                        isOrphan = false
+                        break 
+                    break if !isOrphan
 
-                # If empty, recurse on delete.
-                if isOrphan
-                  await model[ targetVertex.name ].delete _target 
+                  # If empty, recurse on delete.
+                  if isOrphan
+                    await model[ targetVertex.name ].delete _target 
           
 
           # Delete search edges and the vertex itself.
