@@ -1,6 +1,6 @@
 {
   "name": "@dashkite/graphite",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Graph Database For DynamoDB",
   "exports": {
     ".": {
